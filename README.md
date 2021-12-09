@@ -27,11 +27,11 @@ meaningOfLife <- function() {
 ```r
 library("se.alipsa:sourceUrl")
 sourceUrl("https://somewhere.com/myscript.R")
-print(paste("The answer to the ultimate question of life, the universe, and everything is", meaningOfLife()))
+print(paste("The answer to the ultimate question is", meaningOfLife()))
 ```
 which will output
 ```
-[1] "The answer to the ultimate question of life, the universe, and everything is 42"
+[1] "The answer to the ultimate question is 42"
 ```
 
 ## Parameters
