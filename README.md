@@ -45,4 +45,6 @@ __envir__ (Optional, default=.GlobalEnv) The environment you want to evaluate (r
 
 # Version history
 
-## 1.0 Initial version, 2021-12-09
+## 1.0.1-SNAPSHOT
+
+## 1.0.0 Initial version, 2021-12-09
