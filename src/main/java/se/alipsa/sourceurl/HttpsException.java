@@ -1,5 +1,8 @@
 package se.alipsa.sourceurl;
 
+/**
+ * Represents HTTPS problems
+ */
 public class HttpsException extends Exception {
   public HttpsException() {
     super();

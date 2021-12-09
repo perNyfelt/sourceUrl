@@ -1,37 +1,51 @@
 package se.alipsa.sourceurl;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.http.Header;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.config.Registry;
-import org.apache.http.config.RegistryBuilder;
-import org.apache.http.conn.HttpClientConnectionManager;
-import org.apache.http.conn.socket.ConnectionSocketFactory;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
-import org.apache.http.entity.ContentType;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
-import org.apache.http.ssl.SSLContexts;
 
-import javax.net.ssl.SSLContext;
+import javax.net.ssl.*;
 import java.io.IOException;
-import java.io.InputStream;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
-import java.nio.charset.UnsupportedCharsetException;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
+import java.security.cert.X509Certificate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class SourceUrl {
+
+  private static final Pattern charsetPattern = Pattern.compile("(?i)\\bcharset=\\s*\"?([^\\s;\"]*)");
 
   private SourceUrl() {
     // static methods only
   }
 
+  private static TrustManager[] trustAllCerts = new TrustManager[]{
+      new X509TrustManager() {
+        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+          return new X509Certificate[0];
+        }
+
+        public void checkClientTrusted(
+            java.security.cert.X509Certificate[] certs, String authType) {
+        }
+
+        public void checkServerTrusted(
+            java.security.cert.X509Certificate[] certs, String authType) {
+        }
+      }
+  };
+
+  /**
+   * Download the content of the url as a String
+   * @param url the URL to the resource to download
+   * @param allowSelfSigned whether to allow self-signed certificates or not
+   * @return The body content as a string
+   * @throws HttpsException if something goes wrong with a https url
+   * @throws IOException if something goes wrong with a http url
+   */
   public static String fetchContent(String url, boolean allowSelfSigned) throws HttpsException, IOException {
     if (url == null) {
       throw new IllegalArgumentException("url parameter cannot be null");
@@ -48,51 +62,37 @@ public final class SourceUrl {
   }
 
   private static String fetchHttp(String url) throws IOException {
-    CloseableHttpClient httpClient = HttpClients.createDefault();
-    return getContent(url, httpClient);
+    return getContent(new URL(url));
   }
 
-  private static String getContent(String url, CloseableHttpClient httpClient) throws IOException {
-    HttpGet httpGet = new HttpGet(url);
-    try (CloseableHttpResponse sslResponse = httpClient.execute(httpGet);
-         InputStream is = sslResponse.getEntity().getContent()) {
-
-      Header[] headers = sslResponse.getHeaders("Content-Type");
-      Header contentTypeHeader = Arrays.stream(headers).filter(h -> h.getValue().toLowerCase().contains("charset")).findAny().orElse(null);
-
-      String charset = contentTypeHeader == null ? StandardCharsets.UTF_8.name() : extractCharset(contentTypeHeader.getValue());
-      return IOUtils.toString(is, charset);
-    }
+  private static String getContent(URL url) throws IOException {
+    URLConnection con = url.openConnection();
+    String charset = extractCharset(con.getContentType(), StandardCharsets.UTF_8.name());
+    return IOUtils.toString(url, charset);
   }
 
-  private static String fetchHttps(String url, boolean allowSelfSigned) throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException, IOException {
-    CloseableHttpClient httpClient;
+  private static String fetchHttps(String urlString, boolean allowSelfSigned) throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException, IOException {
+
     if (allowSelfSigned) {
-      SSLContext sslContext = SSLContexts.custom()
-          .loadTrustMaterial(new TrustSelfSignedStrategy())
-          .build();
-      SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(sslContext);
-      Registry<ConnectionSocketFactory> reg =
-          RegistryBuilder.<ConnectionSocketFactory>create()
-              .register("https", socketFactory)
-              .build();
-      HttpClientConnectionManager cm = new PoolingHttpClientConnectionManager(reg);
-      httpClient = HttpClients.custom()
-          .setConnectionManager(cm)
-          .build();
-
-    } else {
-      httpClient = HttpClients.createDefault();
+      SSLContext sc = SSLContext.getInstance("SSL");
+      sc.init(null, trustAllCerts, new java.security.SecureRandom());
+      HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+      HostnameVerifier allHostsValid = (hostname, session) -> true;
+      HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
     }
-    return getContent(url, httpClient);
+    URL url = new URL(urlString);
+    return getContent(url);
   }
 
-  private static String extractCharset(String contentTypeString) {
-    try {
-      ContentType contentType = ContentType.parse(contentTypeString);
-      return contentType.getCharset().name();
-    } catch (UnsupportedCharsetException e) {
-      return e.getCharsetName(); // extract unsupported charsetName
+  private static String extractCharset(String contentType, String defaultCharset) {
+    if (contentType == null)
+      return null;
+    Matcher m = charsetPattern.matcher(contentType);
+    if (m.find()) {
+      return m.group(1).trim().toUpperCase();
     }
+    return defaultCharset;
   }
+
+
 }
